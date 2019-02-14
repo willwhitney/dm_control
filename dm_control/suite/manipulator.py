@@ -70,13 +70,37 @@ def make_model(use_peg, insert):
 
 
 @SUITE.add('easy')
-def bring_ball_dense(observe_target=True, time_limit=_TIME_LIMIT, random=None,
+def bring_ball_dense(fully_observable=True, time_limit=_TIME_LIMIT, random=None,
                environment_kwargs=None):
   """Returns manipulator bring task with the ball prop."""
   use_peg = False
   insert = False
   physics = Physics.from_xml_string(*make_model(use_peg, insert))
-  task = Bring(use_peg, insert, observe_target, dense=True, random=random)
+  task = Bring(use_peg, insert, fully_observable, dense=True, random=random)
+  environment_kwargs = environment_kwargs or {}
+  return control.Environment(
+      physics, task, control_timestep=_CONTROL_TIMESTEP, time_limit=time_limit,
+      **environment_kwargs)
+
+
+@SUITE.add('easy')
+def reach(time_limit=_TIME_LIMIT, random=None, environment_kwargs=None):
+  """Returns manipulator bring task with the ball prop."""
+  use_peg = False
+  insert = False
+  physics = Physics.from_xml_string(*make_model(use_peg, insert))
+  task = Reach(use_peg=False, insert=False, fully_observable=True, random=random)
+  environment_kwargs = environment_kwargs or {}
+  return control.Environment(
+      physics, task, control_timestep=_CONTROL_TIMESTEP, time_limit=time_limit,
+      **environment_kwargs)
+
+
+@SUITE.add('easy')
+def chase(time_limit=_TIME_LIMIT, random=None, environment_kwargs=None):
+  """Returns manipulator bring task with the ball prop."""
+  physics = Physics.from_xml_string(*make_model(use_peg, insert))
+  task = Chase(use_peg=False, insert=False, fully_observable=True, random=random)
   environment_kwargs = environment_kwargs or {}
   return control.Environment(
       physics, task, control_timestep=_CONTROL_TIMESTEP, time_limit=time_limit,
@@ -310,3 +334,11 @@ class Bring(base.Task):
       return self._peg_reward(physics)#, dense=self._dense)
     else:
       return self._ball_reward(physics, dense=self._dense)
+
+class Reach(Bring):
+    def get_reward(self, physics):
+        return max(0, 2 * (0.5 - physics.site_distance('grasp', 'target_ball')))
+
+class Chase(Bring):
+    def get_reward(self, physics):
+        return max(0, 2 * (0.5 - physics.site_distance('grasp', 'ball')))
