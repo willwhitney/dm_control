@@ -69,6 +69,20 @@ def make_model(use_peg, insert):
   return etree.tostring(mjcf, pretty_print=True), common.ASSETS
 
 
+@SUITE.add('easy')
+def bring_ball_dense(observe_target=True, time_limit=_TIME_LIMIT, random=None,
+               environment_kwargs=None):
+  """Returns manipulator bring task with the ball prop."""
+  use_peg = False
+  insert = False
+  physics = Physics.from_xml_string(*make_model(use_peg, insert))
+  task = Bring(use_peg, insert, observe_target, dense=True, random=random)
+  environment_kwargs = environment_kwargs or {}
+  return control.Environment(
+      physics, task, control_timestep=_CONTROL_TIMESTEP, time_limit=time_limit,
+      **environment_kwargs)
+
+
 @SUITE.add('benchmarking', 'hard')
 def bring_ball(fully_observable=True, time_limit=_TIME_LIMIT, random=None,
                environment_kwargs=None):
@@ -163,7 +177,7 @@ class Physics(mujoco.Physics):
 class Bring(base.Task):
   """A Bring `Task`: bring the prop to the target."""
 
-  def __init__(self, use_peg, insert, fully_observable, random=None):
+  def __init__(self, use_peg, insert, fully_observable, dense=False, random=None):
     """Initialize an instance of the `Bring` task.
 
     Args:
@@ -183,6 +197,7 @@ class Bring(base.Task):
     self._receptacle = 'slot' if self._use_peg else 'cup'
     self._insert = insert
     self._fully_observable = fully_observable
+    self._dense = dense
     super(Bring, self).__init__(random=random)
 
   def initialize_episode(self, physics):
@@ -274,15 +289,24 @@ class Bring(base.Task):
     bring_tip = self._is_close(physics.site_distance('target_peg_tip',
                                                      'peg_tip'))
     bringing = (bring + bring_tip) / 2
-    return max(bringing, grasping/3)
+    sparse_reward = max(bringing, grasping/3)
+    return sparse_reward
 
-  def _ball_reward(self, physics):
+  def _ball_reward(self, physics, dense=False):
     """Returns a reward for bringing the ball prop to the target."""
-    return self._is_close(physics.site_distance('ball', 'target_ball'))
+    sparse_reward = self._is_close(physics.site_distance('ball', 'target_ball'))
+    if dense:
+      # import ipdb; ipdb.set_trace()
+      dense_reward = (0.5 - physics.site_distance('ball', 'grasp')) + \
+                     (0.5 - physics.site_distance('ball', 'target_ball'))
+      reward = max(sparse_reward, 0.1 * dense_reward)
+    else:
+      reward = sparse_reward
+    return reward
 
   def get_reward(self, physics):
     """Returns a reward to the agent."""
     if self._use_peg:
-      return self._peg_reward(physics)
+      return self._peg_reward(physics)#, dense=self._dense)
     else:
-      return self._ball_reward(physics)
+      return self._ball_reward(physics, dense=self._dense)
